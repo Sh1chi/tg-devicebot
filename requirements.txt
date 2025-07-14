@@ -1,0 +1,2 @@
+pyTelegramBotAPI==4.15.4   # telebot
+python-dotenv==1.0.1       # переменные из .env
