@@ -1,16 +1,33 @@
-# This is a sample Python script.
+import asyncio
+from aiogram import Bot, Dispatcher
+from aiogram.client.default import DefaultBotProperties
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+from app import config, logger
+from app.handlers import routers
+from app.logger import setup_logging
+
+async def main():
+    setup_logging()
+    bot = Bot(
+        token=config.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode="Markdown")
+    )
+    dp = Dispatcher()
+
+    # Подключаем все роутеры
+    for r in routers:
+        dp.include_router(r)
+
+    try:
+        logger.logging.getLogger(__name__).info("Bot starting…")
+        await dp.start_polling(bot, skip_updates=True)
+    except asyncio.CancelledError:
+        # gracefully ignore internal cancellation
+        pass
+    finally:
+        # обязательно закроем сессию у бота
+        await bot.session.close()
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+if __name__ == "__main__":
+    asyncio.run(main())
