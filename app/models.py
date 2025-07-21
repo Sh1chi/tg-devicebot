@@ -102,14 +102,18 @@ async def all_user_ids() -> list[int]:
     return [r["telegram_id"] for r in rows]          # ← telegram_id
 
 
-async def user_ids_for_model(model: str) -> list[int]:
+async def user_ids_for_models(models: list[str]) -> list[int]:
+    """
+    Вернёт всех пользователей, которые интересовались
+    ЛЮБОЙ моделью из переданного списка.
+    """
     rows = await db.pool.fetch(
         """
-        SELECT DISTINCT up.user_id                        -- уже telegram_id
-        FROM user_phones  up
-        JOIN phones       p ON p.id = up.phone_id
-        WHERE p.model = $1
+        SELECT DISTINCT up.user_id          -- это telegram_id
+        FROM user_phones up
+        JOIN phones      p ON p.id = up.phone_id
+        WHERE p.model = ANY($1::text[])
         """,
-        model,
+        models,
     )
     return [r["user_id"] for r in rows]

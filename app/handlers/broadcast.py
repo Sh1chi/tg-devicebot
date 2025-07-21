@@ -27,14 +27,15 @@ async def broadcast_entry(m: types.Message, state: FSMContext):
     if m.from_user.id not in ADMINS:
         return
     await state.clear()
+    await state.update_data(selected_models=[])
 
     # клавиатура: «📢 Всем» + список моделей iPhone
-    kb = await build_audience_kb()
+    kb = await build_audience_kb([])
     await m.answer("Кому отправлять рассылку?", reply_markup=kb)
     await state.set_state(BC.choosing_audience)
 
 
-async def build_audience_kb() -> types.InlineKeyboardMarkup:
+async def build_audience_kb(selected: list[str]) -> types.InlineKeyboardMarkup:
     models_list = await models.distinct_models()
     builder = keyboards.InlineBuilderOneColumn()
 
@@ -43,25 +44,56 @@ async def build_audience_kb() -> types.InlineKeyboardMarkup:
 
     # по моделям
     for mdl in models_list:
-        builder.add(InlineKeyboardButton(text=mdl, callback_data=f"aud:{mdl}"))
+        prefix = "✅ " if mdl in selected else "▫️ "
+        builder.add(InlineKeyboardButton(text=prefix + mdl, callback_data=f"tgl:{mdl}"))
 
+    # «Далее»
+    builder.add(InlineKeyboardButton(text="➡️ Далее", callback_data="aud:next"))
     return builder.as_markup()
 
 
-# ─────────── Шаг 0: выбор аудитории ───────────
-@router.callback_query(BC.choosing_audience, F.data.startswith("aud:"))
-async def aud_chosen(c: types.CallbackQuery, state: FSMContext):
-    key = c.data.split(":", 1)[1]          # 'all' или 'iPhone 14 Plus'
-    await state.update_data(
-        audience="all" if key == "all" else key
-    )
-    await state.set_state(BC.typing_text)
-    txt = "✏️ Пришлите текст рассылки:"
-    if key == "all":
-        txt = "📢 *Всем пользователям.*\n\n" + txt
+# ─────────── Шаг 0: переключение модели ───────────
+@router.callback_query(BC.choosing_audience, F.data.startswith("tgl:"))
+async def toggle_model(c: types.CallbackQuery, state: FSMContext):
+    model = c.data[4:]
+    data = await state.get_data()
+    selected = data.get("selected_models", [])
+    if model in selected:
+        selected.remove(model)
     else:
-        txt = f"📢 *Тем, кто интересовался {key}.*\n\n" + txt
-    await c.message.edit_text(txt, parse_mode="Markdown")
+        selected.append(model)
+    await state.update_data(selected_models=selected)
+    kb = await build_audience_kb(selected)
+    await c.message.edit_reply_markup(reply_markup=kb)
+    await c.answer()
+
+
+# ─────────── Шаг 0: «📢 Всем» ───────────
+@router.callback_query(BC.choosing_audience, F.data == "aud:all")
+async def choose_all(c: types.CallbackQuery, state: FSMContext):
+    await state.update_data(audience="all", selected_models=[])
+    await state.set_state(BC.typing_text)
+    await c.message.edit_text("📢 *Всем пользователям.*\n\n✏️ Пришлите текст рассылки:",
+                              parse_mode="Markdown")
+    await c.answer()
+
+
+# ─────────── Шаг 0: «➡️ Далее» ───────────
+@router.callback_query(BC.choosing_audience, F.data == "aud:next")
+async def audience_next(c: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    models_sel = data.get("selected_models", [])
+    if not models_sel:
+        await c.answer("Сначала выберите хотя бы одну модель или нажмите «📢 Всем».", show_alert=True)
+        return
+    await state.update_data(audience="selected")
+    await state.set_state(BC.typing_text)
+    pretty = ", ".join(models_sel)
+    await c.message.edit_text(
+        f"📢 *Пользователям, интересовавшимся:* {pretty}\n\n"
+        "✏️ Пришлите текст рассылки:",
+        parse_mode="Markdown"
+    )
     await c.answer()
 
 
@@ -108,11 +140,12 @@ async def do_broadcast(c: types.CallbackQuery, state: FSMContext):
     await c.answer("Рассылка запущена!", show_alert=True)
     await state.clear()
 
-    # 1) собираем список получателей
-    if data["audience"] == "all":
+    if data.get("audience") == "all":
         users = await models.all_user_ids()
+    elif data.get("audience") == "selected":
+        users = await models.user_ids_for_models(data["selected_models"])
     else:
-        users = await models.user_ids_for_model(data["audience"])
+        users = await models.user_ids_for_models([data["audience"]])
 
     # 2) рассылаем
     sent, failed = 0, 0
