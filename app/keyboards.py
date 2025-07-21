@@ -1,14 +1,15 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from . import models
+import asyncio
 
-def catalog_kb() -> InlineKeyboardMarkup:
+async def catalog_kb() -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
-    for p in models.catalog:
+    for p in await models.get_catalog():
         kb.add(
             InlineKeyboardButton(
-                text=f"{p['name']} — {p['price']}",
-                callback_data=f"prod:{p['id']}",
+                text = f"{p['model']} — ₽ {p['price']:,}",
+                callback_data = f"prod:{p['id']}",
             )
         )
     return kb.as_markup()

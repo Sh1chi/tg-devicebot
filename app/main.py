@@ -2,12 +2,15 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 
-from app import config, logger
+from app import config, logger, db
 from app.handlers import routers
 from app.logger import setup_logging
 
 async def main():
     setup_logging()
+
+    await db.connect()
+
     bot = Bot(
         token=config.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode="Markdown")
@@ -25,6 +28,7 @@ async def main():
         # gracefully ignore internal cancellation
         pass
     finally:
+        await db.close()
         # обязательно закроем сессию у бота
         await bot.session.close()
 
