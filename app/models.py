@@ -59,3 +59,39 @@ async def add_user_phone(user_id: int, phone_id: str | int) -> None:
     async with db.pool.acquire() as conn:
         await conn.execute(query, user_id, pid)
 
+
+async def distinct_models():
+    rows = await db.pool.fetch("SELECT DISTINCT model FROM phones WHERE quantity>0 ORDER BY model")
+    return [r["model"] for r in rows]
+
+
+async def distinct_storages(model: str):
+    rows = await db.pool.fetch(
+        "SELECT DISTINCT storage FROM phones WHERE model=$1 AND quantity>0 ORDER BY storage",
+        model,
+    )
+    return [r["storage"] for r in rows]
+
+
+async def distinct_colors(model: str, storage: int):
+    rows = await db.pool.fetch(
+        """
+        SELECT DISTINCT color
+        FROM phones
+        WHERE model=$1 AND storage=$2 AND quantity>0
+        ORDER BY color
+        """,
+        model, storage,
+    )
+    return [r["color"] for r in rows]
+
+
+async def get_phone_by_attrs(model: str, storage: int, color: str):
+    return await db.pool.fetchrow(
+        """
+        SELECT * FROM phones
+        WHERE model=$1 AND storage=$2 AND color=$3
+        LIMIT 1
+        """,
+        model, storage, color,
+    )
