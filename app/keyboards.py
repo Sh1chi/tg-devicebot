@@ -60,7 +60,7 @@ def paged_kb(values: list, page: int, prefix: str, per_page: int = 6) -> tuple[I
 
 # ─── отправка карточки товара ───────────────────────────────────
 async def send_product_card(
-    msg: Message, phone: dict, delete_prev: bool = False
+msg: Message, phone: dict, delete_prev: bool = False
 ) -> None:
     caption = "\n".join(
         p for p in [
@@ -80,3 +80,14 @@ async def send_product_card(
     if delete_prev:
         await msg.delete()
 
+
+class InlineBuilderOneColumn(InlineKeyboardBuilder):
+    """
+    Каждую кнопку кладёт на свою строку.
+    """
+    def add(self, *buttons: InlineKeyboardButton) -> None:  # type: ignore[override]
+        # каждая add = новая строка
+        self.row(*buttons)
+
+    def as_markup(self) -> InlineKeyboardMarkup:            # noqa: D401
+        return super().as_markup()

@@ -95,3 +95,21 @@ async def get_phone_by_attrs(model: str, storage: int, color: str):
         """,
         model, storage, color,
     )
+
+
+async def all_user_ids() -> list[int]:
+    rows = await db.pool.fetch("SELECT telegram_id FROM users")
+    return [r["telegram_id"] for r in rows]          # ← telegram_id
+
+
+async def user_ids_for_model(model: str) -> list[int]:
+    rows = await db.pool.fetch(
+        """
+        SELECT DISTINCT up.user_id                        -- уже telegram_id
+        FROM user_phones  up
+        JOIN phones       p ON p.id = up.phone_id
+        WHERE p.model = $1
+        """,
+        model,
+    )
+    return [r["user_id"] for r in rows]
