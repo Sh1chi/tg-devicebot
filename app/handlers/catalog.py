@@ -44,17 +44,8 @@ async def product_card(c: types.CallbackQuery) -> None:
         "Чтобы оформить заказ свяжитесь с нашим менеджером:",
         f"{config.MANAGER_CONTACT}",
     ]
-    caption = "\n".join(p for p in text_parts if p is not None)
-
-    # Если есть фото — отправим новым сообщением
-    if product["photo"]:
-        await c.message.answer_photo(
-            photo=product["photo"],
-            caption=caption,
-            parse_mode="Markdown",
-        )
-        await c.message.delete()  # удалим старую карточку без фото
-    else:
-        await c.message.edit_text(caption, parse_mode="Markdown")
-
+    await c.message.edit_text(
+        "\n".join(p for p in text_parts if p is not None),
+        parse_mode="Markdown",
+    )
     await c.answer("Контакты менеджера отправлены")

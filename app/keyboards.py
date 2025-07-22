@@ -60,23 +60,45 @@ def paged_kb(values: list, page: int, prefix: str, per_page: int = 6) -> tuple[I
 
 # ─── отправка карточки товара ───────────────────────────────────
 async def send_product_card(
-msg: Message, phone: dict, delete_prev: bool = False
+    msg: Message,
+    phone: dict,
+    delete_prev: bool = False,
+    ask_confirm: bool = False,
 ) -> None:
-    caption = "\n".join(
-        p for p in [
-            f"*{phone['model']}*",
-            f"Память: {phone['storage']} GB" if phone["storage"] else None,
-            f"Цвет: {phone['color']}"       if phone["color"]   else None,
-            f"Цена: *₽ {phone['price']:,}*",
-            "",
-            "Чтобы оформить заказ свяжитесь с нашим менеджером:",
-            config.MANAGER_CONTACT,
-        ] if p
-    )
+    """Отправляет фото/текст карточки.
+       ask_confirm=True → без контактов + inline-клавиатура «купить/назад».
+    """
+    lines = [
+        f"*{phone['model']}*",
+        f"Память: {phone['storage']} GB" if phone["storage"] else None,
+        f"Цвет: {phone['color']}"        if phone["color"]   else None,
+        f"Цена: *₽ {phone['price']:,}*",
+    ]
+
+    if not ask_confirm:
+        lines += ["", "Для заказа свяжитесь с менеджером:", config.MANAGER_CONTACT]
+
+    caption = "\n".join(l for l in lines if l)
+
+    kb = None
+    if ask_confirm:
+        builder = InlineKeyboardBuilder()
+        builder.row(
+            InlineKeyboardButton(
+                text="✅ Этот хочу", callback_data=f"buy:{phone['id']}"
+            )
+        )
+        builder.row(
+            InlineKeyboardButton(text="❌ Назад", callback_data="back:colors")
+        )
+        kb = builder.as_markup()
+
     if phone["photo"]:
-        await msg.answer_photo(phone["photo"], caption=caption, parse_mode="Markdown")
+        await msg.answer_photo(phone["photo"], caption=caption,
+                               reply_markup=kb, parse_mode="Markdown")
     else:
-        await msg.answer(caption, parse_mode="Markdown")
+        await msg.answer(caption, reply_markup=kb, parse_mode="Markdown")
+
     if delete_prev:
         await msg.delete()
 
