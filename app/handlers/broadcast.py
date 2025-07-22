@@ -10,51 +10,52 @@ from .. import models, keyboards, logger, config
 router = Router()
 log = logger.logging.getLogger(__name__)
 
-ADMINS = set(config.ADMIN_IDS)          # телеграм-id ваших админов
+ADMINS = set(config.ADMIN_IDS)
 
 
-# ─────────── FSM ───────────
 class BC(StatesGroup):
+    """Состояния FSM для рассылки /broadcast."""
     choosing_audience = State()
     typing_text       = State()
     waiting_photo     = State()
     confirming        = State()
 
 
-# ─────────── /broadcast ───────────
 @router.message(F.text == "/broadcast")
 async def broadcast_entry(m: types.Message, state: FSMContext):
+    """Точка входа в рассылку: выбор аудитории."""
     if m.from_user.id not in ADMINS:
+        log.warning("User %s (%s) tried to use /broadcast", m.from_user.id, m.from_user.username)
         return
+
+    log.info("Admin %s (%s) opened broadcast menu", m.from_user.id, m.from_user.username)
+
     await state.clear()
     await state.update_data(selected_models=[])
 
-    # клавиатура: «📢 Всем» + список моделей iPhone
     kb = await build_audience_kb([])
     await m.answer("Кому отправлять рассылку?", reply_markup=kb)
     await state.set_state(BC.choosing_audience)
 
 
 async def build_audience_kb(selected: list[str]) -> types.InlineKeyboardMarkup:
+    """Создаёт клавиатуру для выбора целевой аудитории."""
     models_list = await models.distinct_models()
     builder = keyboards.InlineBuilderOneColumn()
 
-    # «📢 Всем»
     builder.add(InlineKeyboardButton(text="📢 Всем", callback_data="aud:all"))
 
-    # по моделям
     for mdl in models_list:
         prefix = "✅ " if mdl in selected else "▫️ "
         builder.add(InlineKeyboardButton(text=prefix + mdl, callback_data=f"tgl:{mdl}"))
-
-    # «Далее»
     builder.add(InlineKeyboardButton(text="➡️ Далее", callback_data="aud:next"))
+
     return builder.as_markup()
 
 
-# ─────────── Шаг 0: переключение модели ───────────
 @router.callback_query(BC.choosing_audience, F.data.startswith("tgl:"))
 async def toggle_model(c: types.CallbackQuery, state: FSMContext):
+    """Переключает выделение модели в списке."""
     model = c.data[4:]
     data = await state.get_data()
     selected = data.get("selected_models", [])
@@ -68,9 +69,9 @@ async def toggle_model(c: types.CallbackQuery, state: FSMContext):
     await c.answer()
 
 
-# ─────────── Шаг 0: «📢 Всем» ───────────
 @router.callback_query(BC.choosing_audience, F.data == "aud:all")
 async def choose_all(c: types.CallbackQuery, state: FSMContext):
+    """Выбрана аудитория: все пользователи."""
     await state.update_data(audience="all", selected_models=[])
     await state.set_state(BC.typing_text)
     await c.message.edit_text("📢 *Всем пользователям.*\n\n✏️ Пришлите текст рассылки:",
@@ -78,9 +79,9 @@ async def choose_all(c: types.CallbackQuery, state: FSMContext):
     await c.answer()
 
 
-# ─────────── Шаг 0: «➡️ Далее» ───────────
 @router.callback_query(BC.choosing_audience, F.data == "aud:next")
 async def audience_next(c: types.CallbackQuery, state: FSMContext):
+    """Переход к следующему шагу после выбора моделей."""
     data = await state.get_data()
     models_sel = data.get("selected_models", [])
     if not models_sel:
@@ -97,17 +98,17 @@ async def audience_next(c: types.CallbackQuery, state: FSMContext):
     await c.answer()
 
 
-# ─────────── Шаг 1: текст ───────────
 @router.message(BC.typing_text, F.text)
 async def txt_received(m: types.Message, state: FSMContext):
+    """Получен текст рассылки, ожидание фото или skip."""
     await state.update_data(text=m.text)
     await state.set_state(BC.waiting_photo)
     await m.answer("🖼 Если нужна картинка — пришлите ее.\nОтправьте /skip, чтобы продолжить без фото.")
 
 
-# ─────────── Шаг 2: фото или /skip ───────────
 @router.message(BC.waiting_photo, F.photo)
 async def photo_received(m: types.Message, state: FSMContext):
+    """Получено фото для рассылки."""
     file_id = m.photo[-1].file_id
     await state.update_data(photo=file_id)
     await ask_confirm(m, state)
@@ -115,10 +116,12 @@ async def photo_received(m: types.Message, state: FSMContext):
 
 @router.message(BC.waiting_photo, F.text == "/skip")
 async def skip_photo(m: types.Message, state: FSMContext):
+    """Пропуск фото, переход к подтверждению."""
     await ask_confirm(m, state)
 
 
 async def ask_confirm(msg: types.Message | types.CallbackQuery, state: FSMContext):
+    """Показывает предпросмотр рассылки с кнопками подтверждения."""
     data = await state.get_data()
 
     builder = keyboards.InlineBuilderOneColumn()
@@ -130,12 +133,13 @@ async def ask_confirm(msg: types.Message | types.CallbackQuery, state: FSMContex
         await msg.answer_photo(data["photo"], caption=preview, reply_markup=builder.as_markup())
     else:
         await msg.answer(preview, reply_markup=builder.as_markup())
+
     await state.set_state(BC.confirming)
 
 
-# ─────────── Шаг 3: подтверждение ───────────
 @router.callback_query(BC.confirming, F.data == "bc:send")
 async def do_broadcast(c: types.CallbackQuery, state: FSMContext):
+    """Отправляет рассылку выбранной аудитории."""
     data = await state.get_data()
     await c.answer("Рассылка запущена!", show_alert=True)
     await state.clear()
@@ -147,7 +151,7 @@ async def do_broadcast(c: types.CallbackQuery, state: FSMContext):
     else:
         users = await models.user_ids_for_models([data["audience"]])
 
-    # 2) рассылаем
+
     sent, failed = 0, 0
     for uid in users:
         try:
@@ -158,14 +162,22 @@ async def do_broadcast(c: types.CallbackQuery, state: FSMContext):
             sent += 1
         except Exception:
             failed += 1
-        await asyncio.sleep(0.07)       # анти-флуд
+        await asyncio.sleep(0.07)  # анти-флуд
 
-    log.info("Broadcast done: sent=%s failed=%s", sent, failed)
+    log.info(
+        "Broadcast by %s (%s): sent=%d, failed=%d",
+        c.from_user.id,
+        c.from_user.username,
+        sent,
+        failed
+    )
+
     await c.message.answer(f"✅ Рассылка завершена.\nОтправлено: {sent}\nНе доставлено: {failed}")
 
 
 @router.callback_query(BC.confirming, F.data == "bc:cancel")
 async def bc_cancel(c: types.CallbackQuery, state: FSMContext):
+    """Отмена рассылки."""
     await state.clear()
     await c.message.edit_text("🚫 Рассылка отменена.")
     await c.answer()

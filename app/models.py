@@ -1,8 +1,7 @@
 from typing import Sequence, Mapping
+
 from . import db
 
-
-# ---------- USERS ----------
 
 async def save_user(tg_id: int, username: str | None, first: str | None) -> None:
     """
@@ -17,14 +16,24 @@ async def save_user(tg_id: int, username: str | None, first: str | None) -> None
         await conn.execute(query, tg_id, username, first)
 
 
+"""
 async def all_user_ids() -> Sequence[int]:
+
     rows = await db.pool.fetch("SELECT telegram_id FROM users")
     return [row["telegram_id"] for row in rows]
+"""
 
 
-# ---------- PHONES ----------
+async def all_user_ids() -> list[int]:
+    """
+    Список всех Telegram ID зарегистрированных пользователей.
+    """
+    rows = await db.pool.fetch("SELECT telegram_id FROM users")
+    return [r["telegram_id"] for r in rows]
+
 
 async def get_catalog() -> Sequence[Mapping]:
+    """Список телефонов в наличии, отсортированный по цене."""
     query = """
         SELECT id, model, storage, color, price
         FROM phones
@@ -35,10 +44,8 @@ async def get_catalog() -> Sequence[Mapping]:
 
 
 async def get_phone(phone_id: str | int):
-    """
-    Вернёт одну строку из phones по её числовому id.
-    """
-    pid = int(phone_id)                    # приводим к int
+    """Получить телефон по ID."""
+    pid = int(phone_id)
     return await db.pool.fetchrow(
         "SELECT * FROM phones WHERE id = $1",
         pid,
@@ -47,7 +54,8 @@ async def get_phone(phone_id: str | int):
 
 async def add_user_phone(user_id: int, phone_id: str | int) -> None:
     """
-    Записать факт интереса пользователя к телефону.
+    Зафиксировать интерес пользователя к конкретному телефону.
+    Повторный интерес обновит поле added_at.
     """
     pid = int(phone_id)
     query = """
@@ -61,11 +69,13 @@ async def add_user_phone(user_id: int, phone_id: str | int) -> None:
 
 
 async def distinct_models():
+    """Уникальные модели, доступные в наличии."""
     rows = await db.pool.fetch("SELECT DISTINCT model FROM phones WHERE quantity>0 ORDER BY model")
     return [r["model"] for r in rows]
 
 
 async def distinct_storages(model: str):
+    """Доступные объёмы памяти для указанной модели."""
     rows = await db.pool.fetch(
         "SELECT DISTINCT storage FROM phones WHERE model=$1 AND quantity>0 ORDER BY storage",
         model,
@@ -74,6 +84,7 @@ async def distinct_storages(model: str):
 
 
 async def distinct_colors(model: str, storage: int):
+    """Доступные цвета для конкретной модели и объёма памяти."""
     rows = await db.pool.fetch(
         """
         SELECT DISTINCT color
@@ -87,6 +98,7 @@ async def distinct_colors(model: str, storage: int):
 
 
 async def get_phone_by_attrs(model: str, storage: int, color: str):
+    """Получить телефон по тройке: модель, объём, цвет."""
     return await db.pool.fetchrow(
         """
         SELECT * FROM phones
@@ -97,16 +109,8 @@ async def get_phone_by_attrs(model: str, storage: int, color: str):
     )
 
 
-async def all_user_ids() -> list[int]:
-    rows = await db.pool.fetch("SELECT telegram_id FROM users")
-    return [r["telegram_id"] for r in rows]          # ← telegram_id
-
-
 async def user_ids_for_models(models: list[str]) -> list[int]:
-    """
-    Вернёт всех пользователей, которые интересовались
-    ЛЮБОЙ моделью из переданного списка.
-    """
+    """Получить пользователей, интересовавшихся любой из указанных моделей."""
     rows = await db.pool.fetch(
         """
         SELECT DISTINCT up.user_id          -- это telegram_id

@@ -1,9 +1,11 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
+
 from . import models, config
 
 
 async def catalog_kb() -> InlineKeyboardMarkup:
+    """Создаёт inline-клавиатуру с актуальными моделями iPhone."""
     kb = InlineKeyboardBuilder()
     for p in await models.get_catalog():
         kb.add(
@@ -16,13 +18,14 @@ async def catalog_kb() -> InlineKeyboardMarkup:
 
 
 def start_kb() -> InlineKeyboardMarkup:
+    """Клавиатура для команды /start с кнопкой «Каталог»."""
     builder = InlineKeyboardBuilder()
     builder.button(text="📱 Каталог", callback_data="show_catalog")
     return builder.as_markup()
 
 
-# ─── облегчённые КБ ──────────────────────────────────────────────
 def simple_kb(values: list, prefix: str, back_cb: str | None = None) -> InlineKeyboardMarkup:
+    """"Генерирует клавиатуру со списком значений + кнопка «Назад» (если есть)."""
     kb = InlineKeyboardBuilder()
     for v in values:
         kb.add(InlineKeyboardButton(text=str(v), callback_data=f"{prefix}:{v}"))
@@ -32,11 +35,11 @@ def simple_kb(values: list, prefix: str, back_cb: str | None = None) -> InlineKe
 
 
 def paged_kb(values: list, page: int, prefix: str, per_page: int = 6) -> tuple[InlineKeyboardMarkup, int]:
+    """Клавиатура с пагинацией: каждая кнопка — в отдельной строке, навигация снизу."""
     pages = (len(values) - 1) // per_page + 1
     page = max(0, min(page, pages - 1))
     start, end = page * per_page, (page + 1) * per_page
 
-    # теперь одна кнопка в ряду
     builder = InlineKeyboardBuilder()
 
     for v in values[start:end]:
@@ -44,7 +47,6 @@ def paged_kb(values: list, page: int, prefix: str, per_page: int = 6) -> tuple[I
             InlineKeyboardButton(text=str(v), callback_data=f"{prefix}:{v}")
         )
 
-    # пагинация (тоже в одну строку)
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton(text="◀", callback_data=f"page:{prefix}:{page-1}"))
@@ -52,21 +54,20 @@ def paged_kb(values: list, page: int, prefix: str, per_page: int = 6) -> tuple[I
     if page < pages - 1:
         nav.append(InlineKeyboardButton(text="▶", callback_data=f"page:{prefix}:{page+1}"))
     if nav:
-        # несмотря на row_width, разметка из одного .row() будет в одной строке
         builder.row(*nav)
 
     return builder.as_markup(), page
 
 
-# ─── отправка карточки товара ───────────────────────────────────
 async def send_product_card(
     msg: Message,
     phone: dict,
     delete_prev: bool = False,
     ask_confirm: bool = False,
 ) -> None:
-    """Отправляет фото/текст карточки.
-       ask_confirm=True → без контактов + inline-клавиатура «купить/назад».
+    """
+    Отправляет карточку товара с описанием.
+    Если ask_confirm=True — показывает кнопки «Этот хочу» и «Назад».
     """
     lines = [
         f"*{phone['model']}*",
@@ -84,9 +85,7 @@ async def send_product_card(
     if ask_confirm:
         builder = InlineKeyboardBuilder()
         builder.row(
-            InlineKeyboardButton(
-                text="✅ Этот хочу", callback_data=f"buy:{phone['id']}"
-            )
+            InlineKeyboardButton(text="✅ Этот хочу", callback_data=f"buy:{phone['id']}")
         )
         builder.row(
             InlineKeyboardButton(text="❌ Назад", callback_data="back:colors")
@@ -94,8 +93,7 @@ async def send_product_card(
         kb = builder.as_markup()
 
     if phone["photo"]:
-        await msg.answer_photo(phone["photo"], caption=caption,
-                               reply_markup=kb, parse_mode="Markdown")
+        await msg.answer_photo(phone["photo"], caption=caption,reply_markup=kb, parse_mode="Markdown")
     else:
         await msg.answer(caption, reply_markup=kb, parse_mode="Markdown")
 
@@ -104,12 +102,9 @@ async def send_product_card(
 
 
 class InlineBuilderOneColumn(InlineKeyboardBuilder):
-    """
-    Каждую кнопку кладёт на свою строку.
-    """
-    def add(self, *buttons: InlineKeyboardButton) -> None:  # type: ignore[override]
-        # каждая add = новая строка
+    """Переопределение: каждая кнопка добавляется в отдельную строку."""
+    def add(self, *buttons: InlineKeyboardButton) -> None:
         self.row(*buttons)
 
-    def as_markup(self) -> InlineKeyboardMarkup:            # noqa: D401
+    def as_markup(self) -> InlineKeyboardMarkup:
         return super().as_markup()

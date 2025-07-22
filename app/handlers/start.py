@@ -1,4 +1,4 @@
-from aiogram import Router, types, F          # F пока не используется, но оставлен «как было»
+from aiogram import Router, types
 from aiogram.filters import CommandStart
 
 from .. import models, keyboards, logger
@@ -9,7 +9,10 @@ log = logger.logging.getLogger(__name__)
 
 @router.message(CommandStart())
 async def cmd_start(m: types.Message) -> None:
-    # вместо in-memory set сохраняем пользователя в таблицу users
+    """
+    Обрабатывает команду /start:
+    сохраняет пользователя и отправляет приветственное сообщение.
+    """
     await models.save_user(
         tg_id=m.from_user.id,
         username=m.from_user.username,

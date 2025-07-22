@@ -6,18 +6,19 @@ from app import config, logger, db
 from app.handlers import routers
 from app.logger import setup_logging
 
-async def main():
-    setup_logging()
 
-    await db.connect()
+async def main():
+    setup_logging()  # Настройка логирования (в файл и консоль)
+
+    await db.connect()  # Подключение к базе данных
 
     bot = Bot(
         token=config.BOT_TOKEN,
-        default=DefaultBotProperties(parse_mode="Markdown")
+        default=DefaultBotProperties(parse_mode="Markdown") # Используем Markdown-разметку по умолчанию
     )
     dp = Dispatcher()
 
-    # Подключаем все роутеры
+    # Регистрируем все маршрутизаторы (обработчики событий)
     for r in routers:
         dp.include_router(r)
 
@@ -25,11 +26,10 @@ async def main():
         logger.logging.getLogger(__name__).info("Bot starting…")
         await dp.start_polling(bot, skip_updates=True)
     except asyncio.CancelledError:
-        # gracefully ignore internal cancellation
+        # Игнорируем отмену при завершении (например, Ctrl+C)
         pass
     finally:
         await db.close()
-        # обязательно закроем сессию у бота
         await bot.session.close()
 
 
