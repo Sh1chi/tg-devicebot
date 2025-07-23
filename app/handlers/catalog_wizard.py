@@ -74,7 +74,11 @@ async def send_color_step(msg: types.Message, model: str, storage: int) -> None:
     """Показывает клавиатуру с доступными цветами."""
     colors = await models.distinct_colors(model, storage)
     kb = keyboards.simple_kb(colors, prefix="color", back_cb="back:storages")
-    await msg.edit_text(f"🎨 *Цвет* {storage} GB, {model}:", reply_markup=kb)
+    if msg.text:
+        await msg.edit_text(f"🎨 *Цвет* {storage} GB, {model}:", reply_markup=kb)
+    else:
+        await msg.delete()
+        await msg.answer(f"🎨 *Цвет* {storage} GB, {model}:", reply_markup=kb, parse_mode="Markdown")
 
 
 @router.callback_query(
@@ -149,7 +153,11 @@ async def back_to_colors(c: types.CallbackQuery, state: FSMContext):
     """Возврат к выбору цвета."""
     data = await state.get_data()
     await state.set_state(Catalog.choosing_color)
-    await send_color_step(c.message, data["model"], data["storage"])
+    msg = c.message
+    if msg.photo:
+        await msg.delete()
+        msg = await c.message.answer("⏳")  # «пустышка», далее заменим через edit_text
+    await send_color_step(msg, data["model"], data["storage"])
     await c.answer()
 
 
