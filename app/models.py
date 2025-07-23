@@ -38,7 +38,7 @@ async def get_catalog() -> Sequence[Mapping]:
         SELECT id, model, storage, color, price
         FROM phones
         WHERE quantity > 0
-        ORDER BY price
+        ORDER BY sort_idx DESC, price
     """
     return await db.pool.fetch(query)
 
@@ -68,9 +68,17 @@ async def add_user_phone(user_id: int, phone_id: str | int) -> None:
         await conn.execute(query, user_id, pid)
 
 
-async def distinct_models():
+async def distinct_models() -> list[str]:
     """Уникальные модели, доступные в наличии."""
-    rows = await db.pool.fetch("SELECT DISTINCT model FROM phones WHERE quantity>0 ORDER BY model")
+    rows = await db.pool.fetch(
+        """
+        SELECT model
+        FROM phones
+        WHERE quantity > 0
+        GROUP BY model
+        ORDER BY MAX(sort_idx) DESC, model -- ← главное поле сортировки
+        """
+    )
     return [r["model"] for r in rows]
 
 
